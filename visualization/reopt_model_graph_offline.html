@@ -1,0 +1,498 @@
++<!DOCTYPE html>
++<html lang="en">
++<head>
++  <meta charset="UTF-8" />
++  <title>REopt Model Graph (Offline)</title>
++  <style>
++    body { font-family: Arial, sans-serif; margin: 0; padding: 0; display: flex; height: 100vh; }
++    #controls { width: 320px; padding: 12px; border-right: 1px solid #ccc; box-sizing: border-box; overflow-y: auto; }
++    #canvas { flex: 1 1 auto; position: relative; background: #fafafa; }
++    #graph-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
++    .node { position: absolute; padding: 6px 10px; border-radius: 6px; border: 1px solid #555; background: #f0f0f0; font-size: 11px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transform: translate(-50%, -50%); }
++    .type-input { background: #cce5ff; }
++    .type-output { background: #d4edda; }
++    .type-technology, .type-module { background: #f5f5f5; }
++    .type-variable, .type-constraint { background: #ffeeba; }
++    .type-objective { background: #f8d7da; }
++    #node-info { white-space: pre-wrap; font-family: monospace; background: #fff; padding: 8px; border: 1px solid #ccc; border-radius: 6px; }
++    .legend .badge { display: inline-block; width: 12px; height: 12px; margin-right: 6px; }
++    .section { margin-bottom: 12px; }
++  </style>
++</head>
++<body>
++  <div id="controls">
++    <h2>REopt Model Graph (Offline)</h2>
++    <div class="section">Dieses HTML kann direkt per Doppelklick (file://) geöffnet werden. Es lädt <code>reopt_model_graph.json</code> falls verfügbar und nutzt ansonsten die eingebetteten Daten.</div>
++    <div class="section">
++      <h3>Edge domains</h3>
++      <label><input type="checkbox" id="toggle-energy" checked> Energy (rot)</label><br>
++      <label><input type="checkbox" id="toggle-data" checked> Data (blau)</label><br>
++      <label><input type="checkbox" id="toggle-money" checked> Money (grün)</label>
++    </div>
++    <div class="section">
++      <h3>Layers</h3>
++      <label><input type="checkbox" id="layer-input" checked> Input</label><br>
++      <label><input type="checkbox" id="layer-model" checked> Model</label><br>
++      <label><input type="checkbox" id="layer-output" checked> Output</label>
++    </div>
++    <div class="legend">
++      <h3>Legende</h3>
++      <div><span class="badge" style="background:red"></span>Energy / Leistung</div>
++      <div><span class="badge" style="background:blue"></span>Data / Parameter</div>
++      <div><span class="badge" style="background:green"></span>Money / Geld</div>
++    </div>
++    <div class="section">
++      <h3>Ausgewählter Knoten</h3>
++      <div id="node-info">(keiner)</div>
++    </div>
++  </div>
++  <div id="canvas">
++    <svg id="graph-svg" xmlns="http://www.w3.org/2000/svg"></svg>
++    <div id="nodes-layer"></div>
++  </div>
++
++  <script id="graph-data-inline" type="application/json">
++{
++  "nodes": [
++    {
++      "id": "input_electric_load",
++      "label": "Electric load / Elektrische Last",
++      "type": "input",
++      "layer": "input",
++      "module": "src/core/electric_load.jl"
++    },
++    {
++      "id": "input_heating_load",
++      "label": "Heating load / Heizlast",
++      "type": "input",
++      "layer": "input",
++      "module": "src/core/heating_cooling_loads.jl"
++    },
++    {
++      "id": "input_pv_resource",
++      "label": "PV resource / PV-Produktionsfaktoren",
++      "type": "input",
++      "layer": "input",
++      "module": "src/core/pv.jl"
++    },
++    {
++      "id": "input_outdoor_temp",
++      "label": "Outdoor air temperature / Au\u00dfentemperatur",
++      "type": "input",
++      "layer": "input",
++      "module": "src/core/scenario.jl"
++    },
++    {
++      "id": "input_electric_tariff",
++      "label": "Electricity tariffs / Stromtarife",
++      "type": "input",
++      "layer": "input",
++      "module": "src/core/electric_tariff.jl"
++    },
++    {
++      "id": "input_financial_params",
++      "label": "Financial parameters / Finanzparameter",
++      "type": "input",
++      "layer": "input",
++      "module": "src/core/financial.jl"
++    },
++    {
++      "id": "model_pv",
++      "label": "PV module",
++      "type": "technology",
++      "layer": "model",
++      "module": "src/core/pv.jl",
++      "technology": "PV"
++    },
++    {
++      "id": "model_battery",
++      "label": "Battery storage",
++      "type": "technology",
++      "layer": "model",
++      "module": "src/core/energy_storage/electric_storage.jl",
++      "technology": "Battery"
++    },
++    {
++      "id": "model_ashp",
++      "label": "ASHP module (Flexible HVAC)",
++      "type": "technology",
++      "layer": "model",
++      "module": "src/core/flexible_hvac.jl",
++      "technology": "ASHP"
++    },
++    {
++      "id": "model_grid",
++      "label": "Grid & load balance / Netz & Lastbilanz",
++      "type": "module",
++      "layer": "model",
++      "module": "src/constraints/load_balance.jl"
++    },
++    {
++      "id": "model_financial",
++      "label": "Financial module",
++      "type": "module",
++      "layer": "model",
++      "module": "src/results/financial.jl"
++    },
++    {
++      "id": "var_capacities",
++      "label": "Capacity decision variables",
++      "type": "variable",
++      "layer": "model",
++      "module": "src/core/reopt_multinode.jl"
++    },
++    {
++      "id": "var_dispatch",
++      "label": "Dispatch variables (power, storage, grid)",
++      "type": "variable",
++      "layer": "model",
++      "module": "src/constraints/load_balance.jl"
++    },
++    {
++      "id": "constraint_load_balance",
++      "label": "Load balance constraints",
++      "type": "constraint",
++      "layer": "model",
++      "module": "src/constraints/load_balance.jl"
++    },
++    {
++      "id": "constraint_storage",
++      "label": "Storage constraints",
++      "type": "constraint",
++      "layer": "model",
++      "module": "src/constraints/storage_constraints.jl"
++    },
++    {
++      "id": "objective_cost",
++      "label": "Objective: minimize lifecycle cost",
++      "type": "objective",
++      "layer": "model",
++      "module": "src/core/reopt_multinode.jl"
++    },
++    {
++      "id": "output_sizes",
++      "label": "Optimal capacities / Optimale Anlagengr\u00f6\u00dfen",
++      "type": "output",
++      "layer": "output",
++      "module": "src/results"
++    },
++    {
++      "id": "output_dispatch",
++      "label": "Dispatch time series",
++      "type": "output",
++      "layer": "output",
++      "module": "src/results"
++    },
++    {
++      "id": "output_economic",
++      "label": "Economic KPIs / Wirtschaftliche Kennzahlen",
++      "type": "output",
++      "layer": "output",
++      "module": "src/results/financial.jl"
++    }
++  ],
++  "edges": [
++    {
++      "source": "input_electric_load",
++      "target": "model_grid",
++      "relation": "data feed",
++      "domain": "data"
++    },
++    {
++      "source": "input_heating_load",
++      "target": "model_ashp",
++      "relation": "data feed",
++      "domain": "data"
++    },
++    {
++      "source": "input_pv_resource",
++      "target": "model_pv",
++      "relation": "resource",
++      "domain": "data"
++    },
++    {
++      "source": "input_outdoor_temp",
++      "target": "model_ashp",
++      "relation": "ambient data",
++      "domain": "data"
++    },
++    {
++      "source": "input_electric_tariff",
++      "target": "model_grid",
++      "relation": "rates",
++      "domain": "data"
++    },
++    {
++      "source": "input_electric_tariff",
++      "target": "model_financial",
++      "relation": "rates",
++      "domain": "data"
++    },
++    {
++      "source": "input_financial_params",
++      "target": "model_financial",
++      "relation": "parameters",
++      "domain": "data"
++    },
++    {
++      "source": "var_capacities",
++      "target": "objective_cost",
++      "relation": "decision",
++      "domain": "data"
++    },
++    {
++      "source": "var_dispatch",
++      "target": "constraint_load_balance",
++      "relation": "constrained_by",
++      "domain": "data"
++    },
++    {
++      "source": "constraint_load_balance",
++      "target": "objective_cost",
++      "relation": "feasibility",
++      "domain": "data"
++    },
++    {
++      "source": "constraint_storage",
++      "target": "objective_cost",
++      "relation": "feasibility",
++      "domain": "data"
++    },
++    {
++      "source": "model_pv",
++      "target": "model_grid",
++      "relation": "electric supply",
++      "domain": "energy"
++    },
++    {
++      "source": "model_pv",
++      "target": "model_battery",
++      "relation": "charge battery",
++      "domain": "energy"
++    },
++    {
++      "source": "model_pv",
++      "target": "model_grid",
++      "relation": "export",
++      "domain": "energy"
++    },
++    {
++      "source": "model_battery",
++      "target": "model_grid",
++      "relation": "discharge",
++      "domain": "energy"
++    },
++    {
++      "source": "model_ashp",
++      "target": "model_grid",
++      "relation": "electric consumption",
++      "domain": "energy"
++    },
++    {
++      "source": "model_ashp",
++      "target": "input_heating_load",
++      "relation": "heat supplied",
++      "domain": "energy"
++    },
++    {
++      "source": "model_grid",
++      "target": "model_financial",
++      "relation": "utility costs",
++      "domain": "money"
++    },
++    {
++      "source": "model_pv",
++      "target": "model_financial",
++      "relation": "capex/opex",
++      "domain": "money"
++    },
++    {
++      "source": "model_battery",
++      "target": "model_financial",
++      "relation": "capex/opex",
++      "domain": "money"
++    },
++    {
++      "source": "model_ashp",
++      "target": "model_financial",
++      "relation": "capex/opex",
++      "domain": "money"
++    },
++    {
++      "source": "objective_cost",
++      "target": "output_economic",
++      "relation": "optimizes",
++      "domain": "money"
++    },
++    {
++      "source": "model_financial",
++      "target": "output_economic",
++      "relation": "calculates",
++      "domain": "money"
++    },
++    {
++      "source": "var_capacities",
++      "target": "output_sizes",
++      "relation": "results",
++      "domain": "money"
++    },
++    {
++      "source": "var_dispatch",
++      "target": "output_dispatch",
++      "relation": "results",
++      "domain": "money"
++    },
++    {
++      "source": "model_grid",
++      "target": "output_dispatch",
++      "relation": "power flows",
++      "domain": "energy"
++    }
++  ]
++}
++  </script>
++
++  <script>
++    const layerY = { input: 100, model: 340, output: 580 };
++    const typeClass = t => `type-${t}`;
++
++    function edgeColor(domain) {
++      if (domain === 'energy') return 'red';
++      if (domain === 'money') return 'green';
++      return 'blue';
++    }
++
++    function readInlineData() {
++      const raw = document.getElementById('graph-data-inline').textContent;
++      return JSON.parse(raw);
++    }
++
++    async function loadGraphData() {
++      // Try to fetch the JSON file (works for file:// in most browsers); fallback to inline data
++      try {
++        const response = await fetch('reopt_model_graph.json');
++        if (response.ok) {
++          return await response.json();
++        }
++      } catch (err) {
++        console.warn('Fetch of reopt_model_graph.json failed, using inline fallback.', err);
++      }
++      return readInlineData();
++    }
++
++    function positionNodes(graphData) {
++      const layers = ['input', 'model', 'output'];
++      const positioned = [];
++      const layerCounts = {};
++      const columnGap = 220;
++      const startX = 140;
++      layers.forEach(layer => layerCounts[layer] = 0);
++      graphData.nodes.forEach(node => {
++        const idx = layerCounts[node.layer]++;
++        const x = startX + idx * columnGap;
++        const y = layerY[node.layer] || 340;
++        positioned.push({ ...node, x, y });
++      });
++      return positioned;
++    }
++
++    function render(graphData) {
++      const nodes = positionNodes(graphData);
++      const nodeMap = Object.fromEntries(nodes.map(n => [n.id, n]));
++      const edges = graphData.edges.map((e, idx) => {
++        const src = nodeMap[e.source];
++        const tgt = nodeMap[e.target];
++        return { ...e, x1: src?.x || 0, y1: src?.y || 0, x2: tgt?.x || 0, y2: tgt?.y || 0, id: `edge-${idx}` };
++      });
++
++      const svg = document.getElementById('graph-svg');
++      const nodesLayer = document.getElementById('nodes-layer');
++      svg.innerHTML = '';
++      nodesLayer.innerHTML = '';
++
++      // SVG markers for arrows
++      const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
++      ['energy','data','money'].forEach(domain => {
++        const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
++        marker.setAttribute('id', `arrow-${domain}`);
++        marker.setAttribute('markerWidth', '10');
++        marker.setAttribute('markerHeight', '10');
++        marker.setAttribute('refX', '6');
++        marker.setAttribute('refY', '3');
++        marker.setAttribute('orient', 'auto');
++        marker.innerHTML = `<path d="M0,0 L0,6 L6,3 z" fill="${edgeColor(domain)}" />`;
++        defs.appendChild(marker);
++      });
++      svg.appendChild(defs);
++
++      edges.forEach(edge => {
++        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
++        line.setAttribute('x1', edge.x1);
++        line.setAttribute('y1', edge.y1);
++        line.setAttribute('x2', edge.x2);
++        line.setAttribute('y2', edge.y2);
++        line.setAttribute('stroke', edgeColor(edge.domain));
++        line.setAttribute('stroke-width', '2');
++        line.setAttribute('marker-end', `url(#arrow-${edge.domain})`);
++        line.dataset.domain = edge.domain;
++        line.dataset.id = edge.id;
++        svg.appendChild(line);
++      });
++
++      nodes.forEach(node => {
++        const div = document.createElement('div');
++        div.className = `node ${typeClass(node.type)}`;
++        div.style.left = `${node.x}px`;
++        div.style.top = `${node.y}px`;
++        div.dataset.layer = node.layer;
++        div.dataset.id = node.id;
++        div.innerText = node.label;
++        div.addEventListener('click', () => showNodeInfo(node));
++        nodesLayer.appendChild(div);
++      });
++    }
++
++    function showNodeInfo(node) {
++      const panel = document.getElementById('node-info');
++      panel.textContent = `ID: ${node.id}
++Label: ${node.label}
++Type: ${node.type}
++Layer: ${node.layer}
++Module: ${node.module || ''}
++Technology: ${node.technology || ''}`;
++    }
++
++    function applyFilters() {
++      const showEnergy = document.getElementById('toggle-energy').checked;
++      const showData = document.getElementById('toggle-data').checked;
++      const showMoney = document.getElementById('toggle-money').checked;
++      const showInput = document.getElementById('layer-input').checked;
++      const showModel = document.getElementById('layer-model').checked;
++      const showOutput = document.getElementById('layer-output').checked;
++
++      document.querySelectorAll('#graph-svg line').forEach(line => {
++        const domain = line.dataset.domain;
++        const visible = (domain === 'energy' && showEnergy) || (domain === 'data' && showData) || (domain === 'money' && showMoney);
++        line.style.display = visible ? 'block' : 'none';
++      });
++
++      document.querySelectorAll('#nodes-layer .node').forEach(node => {
++        const layer = node.dataset.layer;
++        const visible = (layer === 'input' && showInput) || (layer === 'model' && showModel) || (layer === 'output' && showOutput);
++        node.style.display = visible ? 'block' : 'none';
++      });
++    }
++
++    async function init() {
++      const graphData = await loadGraphData();
++      render(graphData);
++      applyFilters();
++      ['toggle-energy','toggle-data','toggle-money','layer-input','layer-model','layer-output'].forEach(id => {
++        document.getElementById(id).addEventListener('change', applyFilters);
++      });
++    }
++
++    init();
++  </script>
++</body>
++</html>
